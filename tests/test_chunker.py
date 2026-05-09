@@ -6,6 +6,50 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from chunker import chunk_text
 
 
+INPUT_TEXT = """\
+SERGEJ LUKJANĚNKO - ŠERÁ HLÍDKA
+
+Tento text je pro věc Světla irelevantní.
+
+Noční hlídka
+
+Tento text je pro věc Tmy irelevantní.
+
+Denní hlídka
+
+Část první
+
+Ničí čas
+
+Prolog
+
+Opravdické moskevské dvory vymizely kdysi v dobách mezi Vysockým a Okudžavou.
+
+Je to zvláštní. Dokonce i po revoluci, kdy se v zájmu odstranění kuchyňské otročiny žen po domech likvidovaly kuchyně, na dvory naštěstí nikdo neútočil.
+"""
+
+EXPECTED_CHUNKS = [
+    (
+        "SERGEJ LUKJANĚNKO - ŠERÁ HLÍDKA. "
+        "Tento text je pro věc Světla irelevantní. "
+        "Noční hlídka. "
+        "Tento text je pro věc Tmy irelevantní. "
+        "Denní hlídka. "
+        "Část první. "
+        "Ničí čas. "
+        "Prolog. "
+        "Opravdické moskevské dvory vymizely kdysi v dobách mezi Vysockým a Okudžavou. "
+        "Je to zvláštní. Dokonce i po revoluci, kdy se v zájmu odstranění kuchyňské otročiny žen po domech likvidovaly kuchyně, na dvory naštěstí nikdo neútočil."
+    )
+]
+
+
+class TestGoldenOutput:
+    def test_real_book_text(self):
+        chunks = chunk_text(INPUT_TEXT, chunk_size=10240)
+        assert chunks == EXPECTED_CHUNKS
+
+
 class TestBasicChunking:
     def test_empty_text(self):
         assert chunk_text("") == []
@@ -41,40 +85,19 @@ class TestParagraphBoundaries:
         chunks = chunk_text(text, chunk_size=10000)
         assert len(chunks) == 1
 
-    def test_paragraph_separator_within_chunk(self):
+    def test_paragraphs_joined_with_space(self):
         p1 = "Para one."
         p2 = "Para two."
         text = p1 + "\n\n" + p2
         chunks = chunk_text(text, chunk_size=10000)
         assert len(chunks) == 1
-        assert " ... " in chunks[0]
-
-    def test_trailing_period_removed_before_separator(self):
-        p1 = "Para one."
-        p2 = "Para two."
-        text = p1 + "\n\n" + p2
-        chunks = chunk_text(text, chunk_size=10000)
-        assert "Para one ... Para two." in chunks[0]
-
-    def test_exclamation_kept_before_separator(self):
-        p1 = "Para one!"
-        p2 = "Para two."
-        text = p1 + "\n\n" + p2
-        chunks = chunk_text(text, chunk_size=10000)
-        assert "Para one! ... " in chunks[0]
-
-    def test_question_mark_kept_before_separator(self):
-        p1 = "Para one?"
-        p2 = "Para two."
-        text = p1 + "\n\n" + p2
-        chunks = chunk_text(text, chunk_size=10000)
-        assert "Para one? ... " in chunks[0]
+        assert chunks[0] == "Para one. Para two."
 
     def test_blank_paragraphs_ignored(self):
         text = "Para one.\n\n\n\nPara two."
         chunks = chunk_text(text, chunk_size=10000)
         assert len(chunks) == 1
-        assert "Para one" in chunks[0]
+        assert "Para one." in chunks[0]
         assert "Para two." in chunks[0]
 
     def test_three_paragraphs_split_one_each(self):
@@ -84,9 +107,19 @@ class TestParagraphBoundaries:
         text = "\n\n".join([p1, p2, p3])
         chunks = chunk_text(text, chunk_size=100)
         assert len(chunks) == 3
-        assert chunks[0] == p1
-        assert chunks[1] == p2
-        assert chunks[2] == p3
+        assert chunks[0] == p1 + "."
+        assert chunks[1] == p2 + "."
+        assert chunks[2] == p3 + "."
+
+    def test_period_added_to_paragraph_without_punctuation(self):
+        text = "Noční hlídka\n\nDalší odstavec."
+        chunks = chunk_text(text, chunk_size=10000)
+        assert chunks[0].startswith("Noční hlídka.")
+
+    def test_period_not_doubled_on_existing_punctuation(self):
+        text = "Prvý odstavec.\n\nDruhý odstavec."
+        chunks = chunk_text(text, chunk_size=10000)
+        assert "Prvý odstavec.." not in chunks[0]
 
 
 class TestAllTextPreserved:
@@ -94,20 +127,17 @@ class TestAllTextPreserved:
         paragraphs = [f"Paragraph {i} with some content." for i in range(20)]
         text = "\n\n".join(paragraphs)
         chunks = chunk_text(text, chunk_size=80)
-        reassembled = "\n\n".join(chunks)
-        for i, p in enumerate(paragraphs):
-            # Last paragraph in each chunk keeps its period; others lose it before " ... "
-            content = p.rstrip(".")
-            assert content in reassembled
+        reassembled = " ".join(chunks)
+        for p in paragraphs:
+            assert p in reassembled
 
     def test_no_text_lost_or_duplicated(self):
         paragraphs = [f"Text block {i}." for i in range(10)]
         text = "\n\n".join(paragraphs)
         chunks = chunk_text(text, chunk_size=60)
-        all_text = "\n\n".join(chunks)
-        for i, p in enumerate(10 * [None]):
-            content = f"Text block {i}"
-            assert all_text.count(content) == 1
+        all_text = " ".join(chunks)
+        for i in range(10):
+            assert all_text.count(f"Text block {i}.") == 1
 
 
 class TestUnicode:
@@ -124,6 +154,6 @@ class TestUnicode:
         text = "\n\n".join(paragraphs)
         chunks = chunk_text(text, chunk_size=100)
         assert len(chunks) > 1
-        reassembled = "\n\n".join(chunks)
+        reassembled = " ".join(chunks)
         for i in range(10):
             assert f"přes potok číslo {i}" in reassembled

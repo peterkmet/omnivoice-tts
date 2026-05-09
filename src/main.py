@@ -15,6 +15,16 @@ from converter import convert_wavs_to_mp3, save_wav
 from hardware import get_device
 from inference import create_prompt, generate_chunks, load_model
 
+# ANSI color codes
+DIM    = "\033[2m"
+BLUE   = "\033[34m"
+CYAN   = "\033[36m"
+YELLOW = "\033[33m"
+GREEN  = "\033[32m"
+RED    = "\033[31m"
+BOLD   = "\033[1m"
+RESET  = "\033[0m"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -67,8 +77,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--num-steps",
         type=int,
-        default=16,
-        help="Diffusion steps per chunk (default: 16, max quality: 32)",
+        default=32,
+        help="Diffusion steps per chunk (default: 32, faster: 16)",
     )
     parser.add_argument(
         "--tts-batch",
@@ -102,12 +112,12 @@ def main() -> None:
     # Validate input file
     input_path = Path(args.file)
     if not input_path.is_file():
-        print(f"Error: file not found: {args.file}")
+        print(f"{RED}{BOLD}Error: file not found: {args.file}{RESET}")
         sys.exit(1)
 
     # Check ffmpeg availability
     if not shutil.which("ffmpeg"):
-        print("Error: ffmpeg not found on PATH. Install ffmpeg and try again.")
+        print(f"{RED}{BOLD}Error: ffmpeg not found on PATH. Install ffmpeg and try again.{RESET}")
         sys.exit(1)
 
     # Resolve voice file: check as-is first, then in voices/ directory
@@ -116,8 +126,8 @@ def main() -> None:
         if not voice_path.is_file():
             voice_path = Path("voices") / args.voice
         if not voice_path.is_file():
-            print(f"Error: voice file not found: {args.voice}")
-            print(f"  Looked in: {args.voice}, voices/{args.voice}")
+            print(f"{RED}{BOLD}Error: voice file not found: {args.voice}{RESET}")
+            print(f"{RED}  Looked in: {args.voice}, voices/{args.voice}{RESET}")
             sys.exit(1)
         args.voice = str(voice_path)
 
@@ -134,14 +144,14 @@ def main() -> None:
             for f in txt_files
         ]
         total = len(all_indexed_chunks)
-        print(f"Loaded {total} chunks from disk.")
+        print(f"{DIM}Loaded {total} chunks from disk.{RESET}")
     else:
-        print(f"Reading {args.file}...")
+        print(f"{DIM}Reading {args.file}...{RESET}")
         text = input_path.read_text(encoding="utf-8")
-        print(f"File size: {len(text.encode('utf-8')):,} bytes")
+        print(f"{DIM}File size: {len(text.encode('utf-8')):,} bytes{RESET}")
         raw_chunks = chunk_text(text, args.chunk_size)
         total = len(raw_chunks)
-        print(f"Text split into {total} chunks, saving to disk...")
+        print(f"{DIM}Text split into {total} chunks, saving to disk...{RESET}")
         for i, chunk in enumerate(raw_chunks, start=1):
             (Path(book_output_dir) / f"part_{i:04d}.txt").write_text(chunk, encoding="utf-8")
         all_indexed_chunks = list(enumerate(raw_chunks, start=1))
@@ -149,7 +159,7 @@ def main() -> None:
     # Apply start-chunk override
     if args.start_chunk:
         all_indexed_chunks = [(i, c) for i, c in all_indexed_chunks if i >= args.start_chunk]
-        print(f"Starting from chunk {args.start_chunk}.")
+        print(f"{DIM}Starting from chunk {args.start_chunk}.{RESET}")
 
     # Resume: find already completed chunks
     completed = get_completed_indices(book_output_dir)
@@ -158,18 +168,18 @@ def main() -> None:
     ]
 
     if not pending:
-        print("All chunks already processed. Nothing to do.")
+        print(f"{GREEN}{BOLD}All chunks already processed. Nothing to do.{RESET}")
         sys.exit(0)
 
-    print(f"Resuming: {len(completed)} done, {len(pending)} remaining.")
+    print(f"{DIM}Resuming: {len(completed)} done, {len(pending)} remaining.{RESET}")
 
     # Hardware + model
     device = args.device if args.device else get_device()
-    print(f"Using device: {device}")
+    print(f"{BLUE}Using device: {device}{RESET}")
 
-    print("Loading OmniVoice model (this may take a while on first run)...")
+    print(f"{YELLOW}Loading OmniVoice model (this may take a while on first run)...{RESET}")
     model = load_model(device)
-    print("Model loaded.")
+    print(f"{GREEN}{BOLD}Model loaded.{RESET}")
 
     prompt = create_prompt(model, args.voice)
 
@@ -178,7 +188,7 @@ def main() -> None:
     total_audio_duration = 0.0
     t_start = time.perf_counter()
 
-    print(f"Starting TTS generation (steps={args.num_steps}, batch={args.tts_batch})...")
+    print(f"{BOLD}Starting TTS generation (steps={args.num_steps}, batch={args.tts_batch})...{RESET}")
     batches_done = 0
     total_elapsed = 0.0
     for batch_start in range(0, len(pending), args.tts_batch):
@@ -187,7 +197,7 @@ def main() -> None:
         first_idx, last_idx = batch[0][0], batch[-1][0]
         total_bytes = sum(len(t.encode("utf-8")) for t in texts)
         now = datetime.datetime.now().strftime("%H:%M")
-        print(f"  [{first_idx}-{last_idx}/{total}] {now} — Generating {len(batch)} chunks ({total_bytes:,} bytes)...")
+        print(f"{CYAN}  [{first_idx}-{last_idx}/{total}] {now} — Generating {len(batch)} chunks ({total_bytes:,} bytes)...{RESET}")
 
         t0 = time.perf_counter()
         kwargs = {"text": texts, "language": args.language, "num_step": args.num_steps}
@@ -212,12 +222,17 @@ def main() -> None:
         batches_remaining = (len(pending) - batch_start - len(batch)) / args.tts_batch
         avg_batch_time = total_elapsed / batches_done
         eta = datetime.datetime.now() + datetime.timedelta(seconds=batches_remaining * avg_batch_time)
-        print(f"  [{first_idx}-{last_idx}/{total}] {batch_duration:.1f}s audio in {elapsed:.1f}s (RTF {rtf:.1f}x) — ETA {eta.strftime('%H:%M')}")
+        print(
+            f"{CYAN}  [{first_idx}-{last_idx}/{total}]{RESET} "
+            f"{batch_duration:.1f}s audio in {elapsed:.1f}s "
+            f"(RTF {YELLOW}{rtf:.1f}x{RESET}) — "
+            f"ETA {GREEN}{eta.strftime('%H:%M')}{RESET}"
+        )
 
     t_gen = time.perf_counter() - t_start
     print(
-        f"TTS complete: {total_audio_duration:.0f}s audio generated "
-        f"in {t_gen:.0f}s (RTF {total_audio_duration / t_gen:.1f}x realtime)"
+        f"{GREEN}{BOLD}TTS complete: {total_audio_duration:.0f}s audio generated "
+        f"in {t_gen:.0f}s (RTF {total_audio_duration / t_gen:.1f}x realtime){RESET}"
     )
 
     # Free model from GPU/MPS memory before CPU-bound MP3 conversion
@@ -226,16 +241,16 @@ def main() -> None:
         torch.mps.empty_cache()
     elif torch.cuda.is_available():
         torch.cuda.empty_cache()
-    print("Model freed from memory.")
+    print(f"{DIM}Model freed from memory.{RESET}")
 
     # Convert WAV → MP3 in parallel
-    print("Converting WAV to MP3...")
+    print(f"{YELLOW}Converting WAV to MP3...{RESET}")
     t_mp3 = time.perf_counter()
     mp3_files = convert_wavs_to_mp3(book_output_dir, workers=args.workers)
     t_mp3 = time.perf_counter() - t_mp3
-    print(f"Conversion complete: {len(mp3_files)} MP3 files in {t_mp3:.1f}s.")
+    print(f"{DIM}Conversion complete: {len(mp3_files)} MP3 files in {t_mp3:.1f}s.{RESET}")
 
-    print(f"Done. Output in {book_output_dir}/")
+    print(f"{GREEN}{BOLD}Done. Output in {book_output_dir}/{RESET}")
 
 
 if __name__ == "__main__":
