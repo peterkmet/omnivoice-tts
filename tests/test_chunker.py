@@ -47,13 +47,34 @@ class TestParagraphBoundaries:
         text = p1 + "\n\n" + p2
         chunks = chunk_text(text, chunk_size=10000)
         assert len(chunks) == 1
-        assert " ; " in chunks[0]
+        assert " ... " in chunks[0]
+
+    def test_trailing_period_removed_before_separator(self):
+        p1 = "Para one."
+        p2 = "Para two."
+        text = p1 + "\n\n" + p2
+        chunks = chunk_text(text, chunk_size=10000)
+        assert "Para one ... Para two." in chunks[0]
+
+    def test_exclamation_kept_before_separator(self):
+        p1 = "Para one!"
+        p2 = "Para two."
+        text = p1 + "\n\n" + p2
+        chunks = chunk_text(text, chunk_size=10000)
+        assert "Para one! ... " in chunks[0]
+
+    def test_question_mark_kept_before_separator(self):
+        p1 = "Para one?"
+        p2 = "Para two."
+        text = p1 + "\n\n" + p2
+        chunks = chunk_text(text, chunk_size=10000)
+        assert "Para one? ... " in chunks[0]
 
     def test_blank_paragraphs_ignored(self):
         text = "Para one.\n\n\n\nPara two."
         chunks = chunk_text(text, chunk_size=10000)
         assert len(chunks) == 1
-        assert "Para one." in chunks[0]
+        assert "Para one" in chunks[0]
         assert "Para two." in chunks[0]
 
     def test_three_paragraphs_split_one_each(self):
@@ -74,16 +95,19 @@ class TestAllTextPreserved:
         text = "\n\n".join(paragraphs)
         chunks = chunk_text(text, chunk_size=80)
         reassembled = "\n\n".join(chunks)
-        for p in paragraphs:
-            assert p in reassembled
+        for i, p in enumerate(paragraphs):
+            # Last paragraph in each chunk keeps its period; others lose it before " ... "
+            content = p.rstrip(".")
+            assert content in reassembled
 
     def test_no_text_lost_or_duplicated(self):
         paragraphs = [f"Text block {i}." for i in range(10)]
         text = "\n\n".join(paragraphs)
         chunks = chunk_text(text, chunk_size=60)
         all_text = "\n\n".join(chunks)
-        for p in paragraphs:
-            assert all_text.count(p) == 1
+        for i, p in enumerate(10 * [None]):
+            content = f"Text block {i}"
+            assert all_text.count(content) == 1
 
 
 class TestUnicode:
@@ -101,5 +125,5 @@ class TestUnicode:
         chunks = chunk_text(text, chunk_size=100)
         assert len(chunks) > 1
         reassembled = "\n\n".join(chunks)
-        for p in paragraphs:
-            assert p in reassembled
+        for i in range(10):
+            assert f"přes potok číslo {i}" in reassembled

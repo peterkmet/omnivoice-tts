@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import shutil
 import sys
@@ -178,12 +179,15 @@ def main() -> None:
     t_start = time.perf_counter()
 
     print(f"Starting TTS generation (steps={args.num_steps}, batch={args.tts_batch})...")
+    batches_done = 0
+    total_elapsed = 0.0
     for batch_start in range(0, len(pending), args.tts_batch):
         batch = pending[batch_start : batch_start + args.tts_batch]
         texts = [t for _, t in batch]
         first_idx, last_idx = batch[0][0], batch[-1][0]
         total_bytes = sum(len(t.encode("utf-8")) for t in texts)
-        print(f"  [{first_idx}-{last_idx}/{total}] Generating {len(batch)} chunks ({total_bytes:,} bytes)...")
+        now = datetime.datetime.now().strftime("%H:%M")
+        print(f"  [{first_idx}-{last_idx}/{total}] {now} — Generating {len(batch)} chunks ({total_bytes:,} bytes)...")
 
         t0 = time.perf_counter()
         kwargs = {"text": texts, "language": args.language, "num_step": args.num_steps}
@@ -193,6 +197,8 @@ def main() -> None:
             kwargs["instruct"] = args.instruct
         audios = model.generate(**kwargs)
         elapsed = time.perf_counter() - t0
+        batches_done += 1
+        total_elapsed += elapsed
 
         batch_duration = 0.0
         for (idx, _), audio in zip(batch, audios):
@@ -203,7 +209,10 @@ def main() -> None:
             save_wav(audio, wav_path, sample_rate)
 
         rtf = batch_duration / elapsed if elapsed > 0 else 0
-        print(f"  [{first_idx}-{last_idx}/{total}] {batch_duration:.1f}s audio in {elapsed:.1f}s (RTF {rtf:.1f}x)")
+        batches_remaining = (len(pending) - batch_start - len(batch)) / args.tts_batch
+        avg_batch_time = total_elapsed / batches_done
+        eta = datetime.datetime.now() + datetime.timedelta(seconds=batches_remaining * avg_batch_time)
+        print(f"  [{first_idx}-{last_idx}/{total}] {batch_duration:.1f}s audio in {elapsed:.1f}s (RTF {rtf:.1f}x) — ETA {eta.strftime('%H:%M')}")
 
     t_gen = time.perf_counter() - t_start
     print(

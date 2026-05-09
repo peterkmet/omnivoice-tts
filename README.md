@@ -11,8 +11,8 @@ Local CLI tool that converts `.txt` books into MP3 audiobooks using [k2-fsa/Omni
 ## Setup
 
 ```bash
-git clone https://github.com/user/tts.git
-cd tts
+git clone https://github.com/peterkmet/omnivoice-tts.git
+cd omnivoice-tts
 uv sync
 ```
 
@@ -34,7 +34,11 @@ uv run python src/main.py --file convert/book.txt --language en --workers 1
 | `--instruct` | no | — | Voice design attributes, e.g. `"female, young adult, high pitch"` |
 | `--output-dir` | no | `./output` | Output directory |
 | `--chunk-size` | no | `10240` | Chunk size in bytes |
-| `--workers` | no | CPU count | Batch size for TTS / parallel ffmpeg workers |
+| `--workers` | no | CPU count | Parallel ffmpeg workers for MP3 conversion |
+| `--tts-batch` | no | `4` | Number of chunks per GPU batch |
+| `--num-steps` | no | `16` | Diffusion steps per chunk (max quality: `32`) |
+| `--device` | no | auto | Force device: `mps`, `cuda`, or `cpu` |
+| `--start-chunk` | no | — | Resume from this chunk number (1-based) |
 
 ### Examples
 
@@ -76,7 +80,12 @@ output/
     ...
 ```
 
-Processing is resumable — re-running the same command skips already completed chunks.
+Text chunks are saved as `part_XXXX.txt` alongside the audio files. On re-run, chunks are loaded from disk and already completed audio is skipped automatically.
+
+To resume from a specific chunk:
+```bash
+uv run python src/main.py --file convert/book.txt --language cs --start-chunk 42
+```
 
 ## Tests
 
