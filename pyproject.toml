@@ -1,0 +1,19 @@
+[project]
+name = "tts-book-converter"
+version = "0.1.0"
+description = "Local CLI tool that converts .txt books into MP3 audiobooks using OmniVoice TTS"
+requires-python = ">=3.10"
+dependencies = [
+    "omnivoice",
+    "soundfile",
+    "numpy",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv.sources]
+omnivoice = { git = "https://github.com/k2-fsa/OmniVoice.git" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
