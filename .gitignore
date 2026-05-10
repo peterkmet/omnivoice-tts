@@ -3,9 +3,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 OmniVoice/
-convert/
-voices/
-output/
+convert/*
+!convert/.gitkeep
+voices/*
+!voices/.gitkeep
+output/*
+!output/.gitkeep
 tests/sample_output.wav
 *.egg-info/
 uv.lock
